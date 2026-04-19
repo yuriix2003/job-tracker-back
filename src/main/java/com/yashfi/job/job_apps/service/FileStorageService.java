@@ -7,9 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.PostConstruct;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Base64;
 import java.util.UUID;
 
 @Service
@@ -27,18 +29,23 @@ public class FileStorageService {
     @PostConstruct
     public void initialize() {
         try {
-            File credentialsFile = new File(credentialsPath);
+            GoogleCredentials credentials;
 
-            if (!credentialsFile.exists()) {
-                System.out.println("⚠️  Firebase credentials not found. File upload will be disabled.");
-                System.out.println("   To enable: Add firebase-service-account.json to src/main/resources/");
-                firebaseEnabled = false;
-                return;
+            // Check for base64 encoded credentials (production)
+            String base64Creds = System.getenv("FIREBASE_CREDENTIALS_BASE64");
+            if (base64Creds != null && !base64Creds.isEmpty()) {
+                byte[] decodedBytes = Base64.getDecoder().decode(base64Creds);
+                credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decodedBytes));
+            } else {
+                // Local development - use file
+                File credentialsFile = new File(credentialsPath);
+                if (!credentialsFile.exists()) {
+                    System.out.println("⚠️  Firebase credentials not found. File upload disabled.");
+                    firebaseEnabled = false;
+                    return;
+                }
+                credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath));
             }
-
-            GoogleCredentials credentials = GoogleCredentials.fromStream(
-                    new FileInputStream(credentialsPath)
-            );
 
             storage = StorageOptions.newBuilder()
                     .setCredentials(credentials)

@@ -1,0 +1,26 @@
+# Compiled files
+target/
+*.class
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+
+.env
+*.env
+
+# Logs
+*.log
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+
+src/main/resources/job-tracker-b1138-firebase-adminsdk-fbsvc-65dca07c07.json
+
+### VS Code ###
+.vscode/

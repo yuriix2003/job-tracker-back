@@ -12,7 +12,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,34 +32,20 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Disable CSRF (we're using JWT)
-                .csrf(AbstractHttpConfigurer::disable)
-
-                // Enable CORS with default settings (uses CorsConfig)
+                .csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
-
-                // Configure authorization
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
+                        // Public endpoints - NO AUTHENTICATION REQUIRED
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/jobs", "/api/jobs/**").permitAll()
-                        .requestMatchers("/api/test/**").permitAll()
-                        .requestMatchers("/hello", "/").permitAll()
-                        .requestMatchers("/error").permitAll()
+                        .requestMatchers("/api/test/**").permitAll() // Test endpoints
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 )
-
-                // Stateless session management
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-
-                // Set authentication provider
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
-
-                // Add JWT filter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

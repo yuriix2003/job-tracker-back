@@ -6,10 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.UUID;
@@ -17,11 +15,8 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
-    @Value("${firebase.storage.bucket:}")
+    @Value("${firebase.storage.bucket}")
     private String bucketName;
-
-    @Value("${firebase.credentials.path:src/main/resources/firebase-service-account.json}")
-    private String credentialsPath;
 
     private Storage storage;
     private boolean firebaseEnabled = false;
@@ -34,17 +29,13 @@ public class FileStorageService {
             // Check for base64 encoded credentials (production)
             String base64Creds = System.getenv("FIREBASE_CREDENTIALS_BASE64");
             if (base64Creds != null && !base64Creds.isEmpty()) {
+                System.out.println("🔍 Using base64 Firebase credentials");
                 byte[] decodedBytes = Base64.getDecoder().decode(base64Creds);
                 credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decodedBytes));
             } else {
-                // Local development - use file
-                File credentialsFile = new File(credentialsPath);
-                if (!credentialsFile.exists()) {
-                    System.out.println("⚠️  Firebase credentials not found. File upload disabled.");
-                    firebaseEnabled = false;
-                    return;
-                }
-                credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath));
+                System.out.println("⚠️  No Firebase credentials found. File upload disabled.");
+                firebaseEnabled = false;
+                return;
             }
 
             storage = StorageOptions.newBuilder()
@@ -54,28 +45,45 @@ public class FileStorageService {
 
             firebaseEnabled = true;
             System.out.println("✅ Firebase Storage initialized successfully");
+            System.out.println("📦 Bucket: " + bucketName);
 
         } catch (Exception e) {
-            System.out.println("⚠️  Firebase initialization failed: " + e.getMessage());
+            System.err.println("❌ Firebase initialization failed: " + e.getMessage());
+            e.printStackTrace();
             firebaseEnabled = false;
         }
     }
 
     public String uploadFile(MultipartFile file) throws IOException {
         if (!firebaseEnabled) {
-            throw new RuntimeException("Firebase Storage is not configured. Please add firebase-service-account.json");
+            throw new RuntimeException("Firebase Storage is not configured");
         }
 
-        String fileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
+        try {
+            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
 
-        BlobId blobId = BlobId.of(bucketName, fileName);
-        BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
-                .setContentType(file.getContentType())
-                .build();
+            BlobId blobId = BlobId.of(bucketName, fileName);
+            BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
+                    .setContentType(file.getContentType())
+                    .build();
 
-        storage.create(blobInfo, file.getBytes());
+            storage.create(blobInfo, file.getBytes());
 
-        return String.format("https://storage.googleapis.com/%s/%s", bucketName, fileName);
+            // Return public URL
+            String downloadUrl = String.format(
+                    "https://firebasestorage.googleapis.com/v0/b/%s/o/%s?alt=media",
+                    bucketName,
+                    fileName.replace("/", "%2F")
+            );
+
+            System.out.println("✅ File uploaded: " + downloadUrl);
+            return downloadUrl;
+
+        } catch (Exception e) {
+            System.err.println("❌ File upload failed: " + e.getMessage());
+            e.printStackTrace();
+            throw new IOException("Failed to upload file: " + e.getMessage());
+        }
     }
 
     public void deleteFile(String fileUrl) {
@@ -83,12 +91,26 @@ public class FileStorageService {
             return;
         }
 
-        String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
-        BlobId blobId = BlobId.of(bucketName, fileName);
-        storage.delete(blobId);
+        try {
+            String fileName = extractFileNameFromUrl(fileUrl);
+            BlobId blobId = BlobId.of(bucketName, fileName);
+            storage.delete(blobId);
+            System.out.println("✅ File deleted: " + fileName);
+        } catch (Exception e) {
+            System.err.println("⚠️  File deletion failed: " + e.getMessage());
+        }
     }
 
     public boolean isEnabled() {
         return firebaseEnabled;
+    }
+
+    private String extractFileNameFromUrl(String url) {
+        String[] parts = url.split("/o/");
+        if (parts.length > 1) {
+            String fileName = parts[1].split("\\?")[0];
+            return fileName.replace("%2F", "/");
+        }
+        return "";
     }
 }

@@ -12,17 +12,12 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.Arrays;
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -38,50 +33,37 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // Disable CSRF (we're using JWT)
+                .csrf(AbstractHttpConfigurer::disable)
+
+                // Enable CORS with default settings (uses CorsConfig)
+                .cors(cors -> {})
+
+                // Configure authorization
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints - NO AUTHENTICATION REQUIRED
+                        // Public endpoints
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/jobs", "/api/jobs/**").permitAll()
                         .requestMatchers("/api/test/**").permitAll()
                         .requestMatchers("/hello", "/").permitAll()
+                        .requestMatchers("/error").permitAll()
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 )
+
+                // Stateless session management
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                // Set authentication provider
                 .authenticationProvider(authenticationProvider())
+
+                // Add JWT filter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-
-        // Allow all origins (use specific domains in production)
-        configuration.setAllowedOriginPatterns(List.of("*"));
-
-        // Allow these HTTP methods
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-
-        // Allow all headers
-        configuration.setAllowedHeaders(List.of("*"));
-
-        // Allow credentials (cookies, authorization headers)
-        configuration.setAllowCredentials(true);
-
-        // How long the response from a pre-flight request can be cached
-        configuration.setMaxAge(3600L);
-
-        // Apply this configuration to all paths
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-
-        return source;
     }
 
     @Bean
